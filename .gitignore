@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.local
+backend/.env
+frontend/.env
+chroma_db/
+*.log
+.DS_Store
+Thumbs.db
+nul
