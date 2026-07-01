@@ -46,7 +46,9 @@ class LocalDatabaseService {
     try {
       const initSqlJs = await import('sql.js');
       const SQL = await initSqlJs.default({
-        locateFile: (file) => `https://sql.js.org/dist/${file}`,
+        // jsDelivr is more reliable than sql.js.org and version-pinned, which
+        // fixes the WASM failing to load (the "DB ✗" / DB-not-initialized case).
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/sql.js@1.14.1/dist/${file}`,
       });
 
       // Try to load existing database from IndexedDB

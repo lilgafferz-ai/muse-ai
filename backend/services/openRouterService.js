@@ -105,7 +105,7 @@ class OpenRouterService {
    * Fallback when no API key is configured
    */
   _noKeyFallback(content) {
-    return `⚠️ Muse is in cloud mode but no OpenRouter API key is configured.\n\nTo use Muse in the cloud:\n1. Go to https://openrouter.ai/keys\n2. Create a free API key\n3. Set it as OPENROUTER_API_KEY in your Render environment variables\n4. Redeploy\n\n${content ? `You said: "${content.slice(0, 100)}"` : ''}`;
+    return `⚠️ Nexora is in cloud mode but no OpenRouter API key is configured.\n\nTo use Nexora in the cloud:\n1. Go to https://openrouter.ai/keys\n2. Create a free API key\n3. Set it as OPENROUTER_API_KEY in your Render environment variables\n4. Redeploy\n\n${content ? `You said: "${content.slice(0, 100)}"` : ''}`;
   }
 
   /**
@@ -115,7 +115,7 @@ class OpenRouterService {
     if (errorMsg.includes('429') || errorMsg.includes('rate limit')) {
       return '⚠️ OpenRouter rate limit hit. Free tier: 50 requests/day. Try again later or add credits to your account.';
     }
-    return `⚠️ Muse's cloud brain is buffering. Error: ${errorMsg.slice(0, 100)}`;
+    return `⚠️ Nexora's cloud brain is buffering. Error: ${errorMsg.slice(0, 100)}`;
   }
 
   /**

@@ -93,6 +93,12 @@ router.post('/', async (req, res) => {
       }
     }
 
+    // Never send back an empty reply — the local model occasionally returns
+    // nothing (e.g. it emitted only a tool block). Give Nex a graceful save.
+    if (!response || !response.trim()) {
+      response = "Hmm, I blanked for a second there — mind saying that again?";
+    }
+
     // Persist the response + extract memories — only when the DB is up.
     if (dbUp()) {
       try {

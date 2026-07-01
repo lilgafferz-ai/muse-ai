@@ -49,16 +49,25 @@ const knowledgeRoutes = require('./routes/knowledge');
 const searchRoutes = require('./routes/search');
 const analyticsRoutes = require('./routes/analytics');
 
-app.use('/api/chat', chatRoutes);
-app.use('/api/memory', memoryRoutes);
-app.use('/api/personality', personalityRoutes);
-app.use('/api/sync', syncRoutes);
-app.use('/api/projects', projectsRoutes);
-app.use('/api/planner', plannerRoutes);
-app.use('/api/ideas', ideasRoutes);
-app.use('/api/knowledge', knowledgeRoutes);
-app.use('/api/search', searchRoutes);
-app.use('/api/analytics', analyticsRoutes);
+// Data routes need MongoDB. When it's down, fail fast with a clear 503
+// instead of a confusing 500 — the app degrades gracefully.
+const requireDb = (req, res, next) => {
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({ error: 'This feature needs MongoDB, which is currently offline.' });
+  }
+  next();
+};
+
+app.use('/api/chat', chatRoutes);            // chat has its own no-DB fallback
+app.use('/api/memory', requireDb, memoryRoutes);
+app.use('/api/personality', requireDb, personalityRoutes);
+app.use('/api/sync', requireDb, syncRoutes);
+app.use('/api/projects', requireDb, projectsRoutes);
+app.use('/api/planner', requireDb, plannerRoutes);
+app.use('/api/ideas', requireDb, ideasRoutes);
+app.use('/api/knowledge', requireDb, knowledgeRoutes);
+app.use('/api/search', requireDb, searchRoutes);
+app.use('/api/analytics', requireDb, analyticsRoutes);
 
 // Status endpoint
 app.get('/api/status', async (req, res) => {

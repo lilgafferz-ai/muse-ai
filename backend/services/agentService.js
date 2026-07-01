@@ -21,7 +21,7 @@ class AgentService {
     const conversationContext = this._buildContext(memories, personality, recentChats);
 
     // Full prompt for AI
-    const fullPrompt = `${systemPrompt}\n\n${conversationContext}\n\nRed says: ${userMessage}\n\nWhat do you do, Muse?`;
+    const fullPrompt = `${systemPrompt}\n\n${conversationContext}\n\nRed says: ${userMessage}\n\nWhat do you do, Nex?`;
 
     // Get AI response — route through aiProvider for Ollama/OpenRouter switching
     const response = await aiProvider.generatePrompt(fullPrompt, {
@@ -91,10 +91,9 @@ IMPORTANT:
     const parts = [];
 
     if (personality) {
-      const { traits, communicationStyle } = personality;
-      if (traits) {
-        parts.push(`Personality: wit=${traits.wit}/10, sarcasm=${traits.sarcasm}/10, empathy=${traits.empathy}/10, playfulness=${traits.playfulness}/10`);
-      }
+      const { communicationStyle } = personality;
+      // Stay in character but never recite trait names/numbers.
+      parts.push('Stay in character (witty, warm, a little sarcastic) — never state trait names or numbers.');
       if (communicationStyle) {
         parts.push(`Style: ${communicationStyle}`);
       }
@@ -107,7 +106,7 @@ IMPORTANT:
 
     if (recentChats && recentChats.length > 0) {
       const chatText = recentChats.slice(-4).map(c =>
-        `${c.role === 'user' ? 'Red' : 'Muse'}: ${c.content}`
+        `${c.role === 'user' ? 'Red' : 'Nex'}: ${c.content}`
       ).join('\n');
       parts.push(`\nRecent conversation:\n${chatText}`);
     }
@@ -135,12 +134,14 @@ IMPORTANT:
    * Check if a message looks like a command/task (vs casual chat)
    */
   isCommandRequest(message) {
+    // Only route to agent/tool mode for genuine ACTIONS. Questions like
+    // "what is…" / "tell me about…" are normal chat, not device commands —
+    // routing those to the tool loop made her return empty replies.
     const cmdPatterns = [
-      /^(open|launch|start|run|type|write|create|search|find|play)/i,
-      /^(show|list|read|get|check|tell me about|what is)/i,
+      /^(open|launch|start|run|type|write|create|search|find|play)\b/i,
       /can you (open|type|search|find|play|write|create|run|launch)/i,
       /i need you to/i,
-      /please (open|type|write|search|find|play)/i,
+      /please (open|type|write|search|find|play|launch)/i,
     ];
     return cmdPatterns.some(p => p.test(message.trim()));
   }

@@ -75,7 +75,7 @@ class ContextBuilder {
 
     prompt += `[REASONING]\nThink through what Red is asking, what you know, and the best way to help before answering.\n\n`;
 
-    prompt += `[ANSWER]\nRED: ${userMessage}\n\nMUSE:`;
+    prompt += `[ANSWER]\nRED: ${userMessage}\n\nNEX:`;
 
     return {
       system,
@@ -97,6 +97,15 @@ class ContextBuilder {
     return `\nRELEVANT MEMORIES ABOUT RED:\n${memoryLines.join('\n')}\n`;
   }
 
+  _level(n) {
+    const v = typeof n === 'number' ? n : 5;
+    if (v <= 2) return 'very low';
+    if (v <= 4) return 'low';
+    if (v <= 6) return 'moderate';
+    if (v <= 8) return 'high';
+    return 'very high';
+  }
+
   _buildPersonalityContext(personality) {
     if (!personality) return '';
 
@@ -104,14 +113,23 @@ class ContextBuilder {
     const parts = [];
 
     if (traits) {
-      parts.push(`Current personality traits: wit=${traits.wit}/10, sarcasm=${traits.sarcasm}/10, empathy=${traits.empathy}/10, playfulness=${traits.playfulness}/10, warmth=${traits.warmth}/10`);
+      const desc = [
+        `${this._level(traits.wit)} wit`,
+        `${this._level(traits.sarcasm)} sarcasm`,
+        `${this._level(traits.empathy)} empathy`,
+        `${this._level(traits.playfulness)} playfulness`,
+        `${this._level(traits.warmth)} warmth`,
+      ].join(', ');
+      // Describe qualitatively and tell her to embody, not recite — so she
+      // never parrots "wit=10/10" back to Red.
+      parts.push(`Embody these dials in HOW you talk (never state or list them): ${desc}.`);
     }
     if (communicationStyle) {
-      parts.push(`Communication style: ${communicationStyle}`);
+      parts.push(`Communication style: ${communicationStyle}.`);
     }
     if (nicknames && nicknames.length > 0) {
       const topNickname = nicknames.sort((a, b) => b.used - a.used)[0];
-      parts.push(`Preferred nickname for Red: ${topNickname.name}`);
+      parts.push(`Preferred nickname for Red: ${topNickname.name}.`);
     }
 
     return parts.length > 0 ? `\nPERSONALITY CONTEXT:\n${parts.join('\n')}\n` : '';
@@ -121,7 +139,7 @@ class ContextBuilder {
     if (!chats || chats.length === 0) return '';
 
     return chats.slice(-6).map(c =>
-      `${c.role === 'user' ? 'RED' : 'MUSE'}: ${c.content}`
+      `${c.role === 'user' ? 'RED' : 'NEX'}: ${c.content}`
     ).join('\n');
   }
 
@@ -142,7 +160,7 @@ class ContextBuilder {
     if (personalityContext) prompt += `${personalityContext}\n`;
     if (chatHistory)        prompt += `\nRECENT CONVERSATION:\n${chatHistory}\n\n`;
 
-    prompt += `RED: ${userMessage}\n\nMUSE:`;
+    prompt += `RED: ${userMessage}\n\nNEX:`;
 
     return prompt;
   }

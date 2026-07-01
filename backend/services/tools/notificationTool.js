@@ -71,7 +71,7 @@ class NotificationTool {
     if (!notifier) {
       // Fallback: use PowerShell popup
       const psScript = `
-        (New-Object -ComObject WScript.Shell).Popup("${message.replace(/"/g, '`"').replace(/\n/g, ' ')}", 5, "${(title || 'Muse AI').replace(/"/g, '`"')}", 64)
+        (New-Object -ComObject WScript.Shell).Popup("${message.replace(/"/g, '`"').replace(/\n/g, ' ')}", 5, "${(title || 'Nexora').replace(/"/g, '`"')}", 64)
       `;
       const tmpFile = path.join(os.tmpdir(), `muse_notify_${Date.now()}.ps1`);
       try {
@@ -85,11 +85,11 @@ class NotificationTool {
 
     return new Promise((resolve, reject) => {
       notifier.notify({
-        title: title || 'Muse AI',
+        title: title || 'Nexora',
         message: message,
         sound: true,
         wait: false,
-        appID: 'Muse AI Companion',
+        appID: 'Nexora',
       }, (err) => {
         if (err) reject(new Error(`Notification failed: ${err.message}`));
         else resolve({ message: `Notification sent: ${message}`, sent: true });
@@ -128,7 +128,7 @@ ${text.replace(/'/g, "''")}
     if (!message) throw new Error('Message is required');
 
     setTimeout(() => {
-      this._sendNotification('Muse Reminder', message).catch(() => {});
+      this._sendNotification('Nexora Reminder', message).catch(() => {});
       this._speakText(`Reminder: ${message}`).catch(() => {});
     }, delaySeconds * 1000);
 
