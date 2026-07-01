@@ -199,11 +199,13 @@ export function useVoice() {
 
     recognition.onerror = (event) => {
       console.warn('[Voice] Recognition error:', event.error);
-      if (event.error === 'not-allowed') {
-        setError('Microphone access denied. Allow microphone in browser settings.');
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        setError('Microphone blocked. Click the lock / 🎤 icon in the address bar → allow the mic, then reload.');
         setIsListening(false);
-      } else if (event.error === 'no-speech') {
-        // Ignore — will restart
+      } else if (event.error === 'no-speech' || event.error === 'aborted') {
+        // Ignore — recognition will auto-restart
+      } else if (event.error === 'network') {
+        setError('Voice recognition needs internet (the browser streams audio to Google/Microsoft to transcribe). Reconnect and retry.');
       } else {
         setError(`Voice error: ${event.error}`);
       }
@@ -228,7 +230,14 @@ export function useVoice() {
     const { hotwordMode = false, onCommand } = options;
 
     if (!isSupported) {
-      setError('Speech recognition is not supported in this browser. Try Chrome or Edge.');
+      setError('Voice isn\'t supported in this browser. Use Chrome or Edge.');
+      return;
+    }
+
+    // getUserMedia needs a secure context. localhost is fine, but opening the
+    // app over a raw http:// LAN IP (e.g. from your phone) silently blocks the mic.
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+      setError('Microphone needs a secure page — open the app at http://localhost or over HTTPS, not a raw IP address.');
       return;
     }
 
@@ -251,7 +260,17 @@ export function useVoice() {
             channelCount: 1,
           },
         });
-      } catch { /* fall back to the default mic */ }
+      } catch (err) {
+        if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
+          setError('Microphone blocked. Click the lock / 🎤 icon in your address bar → allow the mic, then try again.');
+          return;
+        }
+        if (err && err.name === 'NotFoundError') {
+          setError('No microphone found — plug one in or check your input device.');
+          return;
+        }
+        /* other errors: fall back to the default mic and let recognition try */
+      }
     }
 
     const recognition = createRecognition();
