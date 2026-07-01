@@ -1,89 +1,97 @@
 /**
- * AI Provider — Abstraction layer that selects between:
- * - Ollama (local, default in development)
- * - OpenRouter (cloud, for deployed environments)
- * 
- * Controlled by AI_PROVIDER env var: "ollama" | "openrouter"
+ * AI Provider — chooses Nexora's brain.
+ *
+ * HYBRID (default): use the smart cloud model (OpenRouter) when online + a key
+ * is configured; fall back to the local model (Ollama) when offline or if the
+ * cloud call fails. Force a specific brain with AI_PROVIDER=ollama|openrouter.
  */
 const ollamaService = require('./ollamaService');
 const openRouterService = require('./openRouterService');
+const connectivityMonitor = require('./connectivityMonitor');
 
 class AIProvider {
   constructor() {
-    this.currentProvider = process.env.AI_PROVIDER || 'ollama';
-    this.isCloud = this.currentProvider === 'openrouter' || !!process.env.OPENROUTER_API_KEY;
+    this.currentProvider = 'ollama';
+    this.isCloud = false;
   }
 
   /**
-   * Get the active provider name
+   * Decide which brain to use for this request.
    */
   getProvider() {
-    // Auto-detect: if running on Render/Railway, prefer OpenRouter
+    const forced = (process.env.AI_PROVIDER || '').toLowerCase();
+    const cloudReady = openRouterService.ready;          // true when an API key is set
+    const online = connectivityMonitor.isOnline;
+
     if (process.env.RENDER || process.env.RAILWAY_SERVICE_ID) {
+      this.currentProvider = 'openrouter';               // deployed → cloud
+    } else if (forced === 'openrouter') {
       this.currentProvider = 'openrouter';
-      this.isCloud = true;
+    } else if (forced === 'ollama') {
+      this.currentProvider = 'ollama';
+    } else {
+      // Hybrid: smart cloud when we can, local otherwise
+      this.currentProvider = (cloudReady && online) ? 'openrouter' : 'ollama';
     }
+
+    this.isCloud = this.currentProvider === 'openrouter';
     return this.currentProvider;
   }
 
-  /**
-   * Generate a response (routes to correct provider)
-   */
+  /** OpenRouter's error/no-key responses come back as "⚠️ …" strings. */
+  _isCloudError(text) {
+    return typeof text === 'string' && text.trim().startsWith('⚠️');
+  }
+
   async generateSystemPrompt(systemPrompt, userMessage, options = {}) {
     this.getProvider();
 
     if (this.currentProvider === 'openrouter' && openRouterService.ready) {
       console.log('[AI] Using OpenRouter (cloud)');
-      return await openRouterService.generate(systemPrompt, userMessage, options);
+      const cloud = await openRouterService.generate(systemPrompt, userMessage, options);
+      if (!this._isCloudError(cloud)) return cloud;
+      console.warn('[AI] Cloud failed — falling back to local Ollama');
     }
 
-    // Ollama: build full prompt from system + user message
     console.log('[AI] Using Ollama (local)');
     const fullPrompt = `${systemPrompt}\n\n${userMessage}`;
     return await ollamaService.generate(fullPrompt, options);
   }
 
-  /**
-   * Generate with a full prompt (for agent mode)
-   */
   async generatePrompt(prompt, options = {}) {
     this.getProvider();
 
     if (this.currentProvider === 'openrouter' && openRouterService.ready) {
-      console.log('[AI] Agent mode using OpenRouter (cloud)');
-      return await openRouterService.generateWithPrompt(prompt, options);
+      console.log('[AI] Using OpenRouter (cloud)');
+      const cloud = await openRouterService.generateWithPrompt(prompt, options);
+      if (!this._isCloudError(cloud)) return cloud;
+      console.warn('[AI] Cloud failed — falling back to local Ollama');
     }
 
-    console.log('[AI] Agent mode using Ollama (local)');
+    console.log('[AI] Using Ollama (local)');
     return await ollamaService.generate(prompt, options);
   }
 
-  /**
-   * Health check for current provider
-   */
   async healthCheck() {
     this.getProvider();
-
     if (this.currentProvider === 'openrouter') {
       return await openRouterService.healthCheck();
     }
     return await ollamaService.healthCheck();
   }
 
-  /**
-   * Get provider info for status endpoint
-   */
   getInfo() {
     this.getProvider();
     return {
       provider: this.currentProvider,
       isCloud: this.isCloud,
+      mode: (process.env.AI_PROVIDER || 'hybrid'),
       model: this.currentProvider === 'openrouter'
         ? openRouterService.model
         : process.env.OLLAMA_MODEL || 'llama3',
       ready: this.currentProvider === 'openrouter'
         ? openRouterService.ready
-        : true  // Ollama is "ready" — will fallback gracefully
+        : true
     };
   }
 }

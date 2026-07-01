@@ -5,8 +5,9 @@
  */
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1';
 const FREE_MODELS = [
-  'meta-llama/llama-3.1-8b-instruct:free',
+  'meta-llama/llama-3.3-70b-instruct:free',   // big, genuinely engaging — best free default
   'deepseek/deepseek-chat:free',
+  'meta-llama/llama-3.1-8b-instruct:free',
   'mistralai/mistral-7b-instruct:free'
 ];
 
@@ -33,8 +34,8 @@ class OpenRouterService {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.apiKey}`,
-          'HTTP-Referer': 'https://muse-ai.app',
-          'X-Title': 'Muse AI Companion'
+          'HTTP-Referer': 'https://nexora.app',
+          'X-Title': 'Nexora'
         },
         body: JSON.stringify({
           model: this.model,
@@ -77,8 +78,8 @@ class OpenRouterService {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.apiKey}`,
-          'HTTP-Referer': 'https://muse-ai.app',
-          'X-Title': 'Muse AI Companion'
+          'HTTP-Referer': 'https://nexora.app',
+          'X-Title': 'Nexora'
         },
         body: JSON.stringify({
           model: this.model,

@@ -123,6 +123,7 @@ export function useVoice() {
   const onCommandRef = useRef(null);
   const isListeningRef = useRef(false);
   const micStreamRef = useRef(null);
+  const speakIdRef = useRef(0);
   
   // Keep isListeningRef in sync with state
   useEffect(() => {
@@ -313,38 +314,49 @@ export function useVoice() {
         return;
       }
 
-      // Cancel any ongoing speech
+      // Cancel any ongoing speech and invalidate its queue
       synthRef.current.cancel();
+      const myId = ++speakIdRef.current;
 
       const spoken = cleanForSpeech(text);
       if (!spoken) { resolve(); return; }
 
-      const utterance = new SpeechSynthesisUtterance(spoken);
-      utterance.lang = RECOGNITION_LANG;
-      utterance.volume = 1.0;
-
-      // Nexora speaks with the most human-sounding female voice available.
+      // Pick voice + prosody once. Neural/"Natural" voices already sound human —
+      // don't distort them; older robotic voices get a gentle warm lift.
       const preferredVoice = pickFemaleVoice(synthRef.current.getVoices());
-      if (preferredVoice) utterance.voice = preferredVoice;
-
-      // Neural/"Natural" voices already sound human — don't distort them.
-      // Older robotic voices get a gentle lift to feel warmer and more feminine.
       const isNeural = preferredVoice &&
         /natural|neural|online|premium|enhanced|google|siri/i.test(preferredVoice.name);
-      utterance.rate = isNeural ? 1.0 : 0.96;
-      utterance.pitch = isNeural ? 1.03 : 1.15;
+      const rate = isNeural ? 1.0 : 0.96;
+      const pitch = isNeural ? 1.03 : 1.15;
 
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => {
-        setIsSpeaking(false);
-        resolve();
-      };
-      utterance.onerror = () => {
-        setIsSpeaking(false);
-        resolve();
-      };
+      // Split into sentence-sized chunks and speak them back-to-back. Browsers
+      // choke / pause oddly on long single utterances — chunking keeps it smooth.
+      const chunks = spoken
+        .replace(/([.!?…])\s+/g, '$1\n')
+        .split('\n')
+        .map(s => s.trim())
+        .filter(Boolean);
 
-      synthRef.current.speak(utterance);
+      if (chunks.length === 0) { resolve(); return; }
+
+      setIsSpeaking(true);
+      let i = 0;
+      const speakNext = () => {
+        // Bail if a newer speak()/stopSpeaking() superseded this one
+        if (speakIdRef.current !== myId) { resolve(); return; }
+        if (i >= chunks.length) { setIsSpeaking(false); resolve(); return; }
+
+        const u = new SpeechSynthesisUtterance(chunks[i++]);
+        u.lang = RECOGNITION_LANG;
+        u.volume = 1.0;
+        u.rate = rate;
+        u.pitch = pitch;
+        if (preferredVoice) u.voice = preferredVoice;
+        u.onend = speakNext;
+        u.onerror = speakNext;
+        synthRef.current.speak(u);
+      };
+      speakNext();
     });
   }, [voiceEnabled]);
 
@@ -352,6 +364,7 @@ export function useVoice() {
    * Stop speaking
    */
   const stopSpeaking = useCallback(() => {
+    speakIdRef.current++;   // invalidate any queued sentence chunks
     if (synthRef.current) {
       synthRef.current.cancel();
       setIsSpeaking(false);

@@ -81,8 +81,8 @@ router.post('/', async (req, res) => {
 
       const fullPrompt = `${system}\n\n${prompt}`;
       response = await aiProvider.generatePrompt(fullPrompt, {
-        temperature: 0.8,
-        maxTokens: 500
+        temperature: 0.85,
+        maxTokens: 350
       });
 
       // Also check if the response contains tool calls anyway
