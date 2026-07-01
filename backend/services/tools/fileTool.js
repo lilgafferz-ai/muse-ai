@@ -47,6 +47,7 @@ class FileTool {
   }
 
   async execute(params) {
+    // Support both 'path' and 'filePath' for compatibility
     const { action, filePath, content, pattern, directory } = params;
     const targetPath = filePath || params.path;
 

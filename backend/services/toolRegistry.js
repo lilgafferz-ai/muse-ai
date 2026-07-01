@@ -18,6 +18,8 @@ class ToolRegistry {
     const { InputTool } = require('./tools/inputTool');
     const { MediaTool } = require('./tools/mediaTool');
     const { BrowserTool } = require('./tools/browserTool');
+    const { DeviceTool } = require('./tools/deviceTool');
+    const { NotificationTool } = require('./tools/notificationTool');
 
     const tools = [
       new AppTool(),
@@ -26,6 +28,8 @@ class ToolRegistry {
       new InputTool(),
       new MediaTool(),
       new BrowserTool(),
+      new DeviceTool(),
+      new NotificationTool(),
     ];
 
     for (const tool of tools) {

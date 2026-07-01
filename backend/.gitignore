@@ -1,0 +1,7 @@
+node_modules/
+.env
+.env.local
+chroma_db/
+*.log
+dist/
+build/

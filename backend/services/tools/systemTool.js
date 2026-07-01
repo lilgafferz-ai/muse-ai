@@ -59,21 +59,33 @@ class SystemTool {
     }
 
     // Safety checks
-    const cmdLower = command.toLowerCase().trim();
+    const trimmed = command.trim();
+    const cmdLower = trimmed.toLowerCase();
 
+    // 1. Reject command chaining, piping, redirection, and substitution outright.
+    //    Without this, an allowlisted prefix could smuggle a dangerous command,
+    //    e.g. `echo hi && shutdown /s` or `ping x | del y`.
+    if (/[&|;`\n\r<>]|\$\(/.test(trimmed)) {
+      throw new Error('Command rejected: chaining, piping, and redirection are not allowed.');
+    }
+
+    // 2. Block dangerous commands wherever they appear (not only as a prefix).
     for (const blocked of BLOCKED_COMMANDS) {
-      if (cmdLower.startsWith(blocked)) {
+      if (cmdLower.includes(blocked)) {
         throw new Error(`Command "${command}" is blocked for security reasons.`);
       }
     }
 
-    const isAllowed = ALLOWED_PREFIXES.some(prefix => cmdLower.startsWith(prefix));
+    // 3. Chaining is already blocked, so only the first token can run — it must
+    //    be on the allowlist. Unlisted commands are NOT executed.
+    const firstToken = cmdLower.split(/\s+/)[0];
+    const isAllowed = ALLOWED_PREFIXES.includes(firstToken);
     if (!isAllowed) {
-      // For unlisted commands, warn but allow (user can confirm)
       return {
-        warning: `Command "${command}" is not in the safe list. Review before executing.`,
+        warning: `Command "${command}" is not in the safe list and was not executed.`,
         command: command,
         needsConfirmation: true,
+        executed: false,
         preview: `Would run: ${command}`
       };
     }

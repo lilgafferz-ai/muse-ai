@@ -1,3 +1,11 @@
+/**
+ * ChromaDB Vector Memory Client
+ * 
+ * Connects to a ChromaDB HTTP server for vector similarity search.
+ * Falls back gracefully to MongoDB-only mode if ChromaDB is unavailable.
+ * 
+ * Requires a running ChromaDB server (install: pip install chromadb, then: chroma run)
+ */
 const { ChromaClient } = require('chromadb');
 
 class ChromaClientWrapper {
@@ -5,27 +13,36 @@ class ChromaClientWrapper {
     this.client = null;
     this.collection = null;
     this.ready = false;
-    this.dbPath = process.env.CHROMA_PATH || './chroma_db';
+    this.serverUrl = process.env.CHROMA_SERVER_URL || 'http://localhost:8000';
   }
 
   async initialize() {
     try {
       this.client = new ChromaClient({
-        path: this.dbPath
+        path: this.serverUrl
       });
+
+      // Verify connection
+      try {
+        await this.client.heartbeat();
+      } catch {
+        throw new Error('ChromaDB server not reachable at ' + this.serverUrl);
+      }
 
       // Try to get existing collection or create new one
       try {
         this.collection = await this.client.getCollection({ name: 'muse_memories' });
+        console.log('[ChromaDB] Found existing collection');
       } catch {
         this.collection = await this.client.createCollection({
           name: 'muse_memories',
           metadata: { 'hnsw:space': 'cosine' }
         });
+        console.log('[ChromaDB] Created new collection');
       }
 
       this.ready = true;
-      console.log('[ChromaDB] Initialized successfully');
+      console.log('[ChromaDB] Initialized successfully at', this.serverUrl);
       return true;
     } catch (error) {
       console.warn('[ChromaDB] Initialization failed (running in fallback mode):', error.message);

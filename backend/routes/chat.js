@@ -2,13 +2,17 @@ const express = require('express');
 const router = express.Router();
 const Chat = require('../models/Chat');
 const Personality = require('../models/Personality');
-const ollamaService = require('../services/ollamaService');
+const aiProvider = require('../services/aiProvider');
 const contextBuilder = require('../services/contextBuilder');
 const memoryEngine = require('../memory/memoryEngine');
 const agentService = require('../services/agentService');
 const toolRegistry = require('../services/toolRegistry');
 const connectivityMonitor = require('../services/connectivityMonitor');
+const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
+
+// MongoDB is optional — Muse still chats (just without persistence) when it's down.
+const dbUp = () => mongoose.connection.readyState === 1;
 
 /**
  * POST /api/chat
@@ -26,23 +30,29 @@ router.post('/', async (req, res) => {
 
     const session = sessionId || uuidv4();
 
-    // Save user message
-    const userChat = new Chat({
-      role: 'user',
-      content: message.trim(),
-      sessionId: session
-    });
-    await userChat.save();
+    // Persist the user message and gather context — but only when the DB is up.
+    // Without MongoDB, Muse still replies; it just won't remember across turns.
+    let memories = [];
+    let personality = null;
+    let recentChats = [];
 
-    // Gather context in parallel
-    const [memories, personality, recentChats] = await Promise.all([
-      memoryEngine.getRelevantMemories(userId, message),
-      Personality.findOne({ userId }).lean(),
-      Chat.find({ sessionId: session })
-        .sort({ timestamp: -1 })
-        .limit(10)
-        .lean()
-    ]);
+    if (dbUp()) {
+      try {
+        await new Chat({ role: 'user', content: message.trim(), sessionId: session }).save();
+
+        [memories, personality, recentChats] = await Promise.all([
+          memoryEngine.getRelevantMemories(userId, message),
+          Personality.findOne({ userId }).lean(),
+          Chat.find({ sessionId: session })
+            .sort({ timestamp: -1 })
+            .limit(10)
+            .lean()
+        ]);
+      } catch (dbErr) {
+        console.warn('[Chat] DB unavailable, continuing without persistence:', dbErr.message);
+        memories = []; personality = null; recentChats = [];
+      }
+    }
 
     let response;
     let usedTools = [];
@@ -70,7 +80,7 @@ router.post('/', async (req, res) => {
       );
 
       const fullPrompt = `${system}\n\n${prompt}`;
-      response = await ollamaService.generate(fullPrompt, {
+      response = await aiProvider.generatePrompt(fullPrompt, {
         temperature: 0.8,
         maxTokens: 500
       });
@@ -83,18 +93,23 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // Save Muse response
-    const museChat = new Chat({
-      role: 'assistant',
-      content: response,
-      sessionId: session,
-      metadata: isAgent ? { mode: connectivityMonitor.isOnline ? 'online' : 'offline', toolsUsed: JSON.stringify(usedTools) } : {}
-    });
-    await museChat.save();
+    // Persist the response + extract memories — only when the DB is up.
+    if (dbUp()) {
+      try {
+        await new Chat({
+          role: 'assistant',
+          content: response,
+          sessionId: session,
+          metadata: isAgent ? { mode: connectivityMonitor.isOnline ? 'online' : 'offline', toolsUsed: JSON.stringify(usedTools) } : {}
+        }).save();
+      } catch (dbErr) {
+        console.warn('[Chat] Could not save response:', dbErr.message);
+      }
 
-    // Save important memories (don't await - fire and forget)
-    memoryEngine.saveMemories(userId, message.trim(), response)
-      .catch(err => console.error('[Chat] Memory save error:', err.message));
+      // Save important memories (fire and forget)
+      memoryEngine.saveMemories(userId, message.trim(), response)
+        .catch(err => console.error('[Chat] Memory save error:', err.message));
+    }
 
     res.json({
       response,

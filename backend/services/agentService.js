@@ -1,6 +1,6 @@
 const toolRegistry = require('./toolRegistry');
 const connectivityMonitor = require('./connectivityMonitor');
-const ollamaService = require('./ollamaService');
+const aiProvider = require('./aiProvider');
 const { AGENT_PROMPT } = require('../prompts/agentPrompt');
 
 /**
@@ -23,8 +23,8 @@ class AgentService {
     // Full prompt for AI
     const fullPrompt = `${systemPrompt}\n\n${conversationContext}\n\nRed says: ${userMessage}\n\nWhat do you do, Muse?`;
 
-    // Get AI response
-    const response = await ollamaService.generate(fullPrompt, {
+    // Get AI response — route through aiProvider for Ollama/OpenRouter switching
+    const response = await aiProvider.generatePrompt(fullPrompt, {
       temperature: 0.7,
       maxTokens: 500
     });
@@ -45,7 +45,7 @@ class AgentService {
     const resultContext = this._buildResultContext(toolResults);
     const finalPrompt = `${systemPrompt}\n\nYou used tools and got these results:\n${resultContext}\n\nTell Red what happened. Be natural about it — don't just list the tool outputs.`;
 
-    const finalResponse = await ollamaService.generate(finalPrompt, {
+    const finalResponse = await aiProvider.generatePrompt(finalPrompt, {
       temperature: 0.7,
       maxTokens: 400
     });

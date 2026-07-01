@@ -104,12 +104,13 @@ class MemoryEngine {
   }
 
   /**
-   * Remove duplicate memories
+   * Remove duplicate memories — checks both type:key and value to avoid
+   * saving the same pattern with slightly different context
    */
   _deduplicate(memories) {
     const seen = new Set();
     return memories.filter(m => {
-      const key = `${m.type}:${m.key}`;
+      const key = `${m.type}:${m.key}:${m.value.toLowerCase().trim()}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -151,6 +152,44 @@ class MemoryEngine {
     }
 
     return detected;
+  }
+
+  /**
+   * Save a single client-authored memory (from offline sync).
+   * Upserts by userId+type+key+value so repeated syncs don't create duplicates.
+   */
+  async saveClientMemory(userId, mem) {
+    const type = mem.type || 'fact';
+    const key = mem.key || 'memory';
+    const value = mem.value;
+    if (!value) return null;
+
+    // Skip if an identical memory already exists
+    const existing = await Memory.findOne({ userId, type, key, value });
+    if (existing) return existing;
+
+    const memory = new Memory({
+      userId,
+      type,
+      key,
+      value,
+      importance: mem.importance || 5,
+      context: mem.context || ''
+    });
+    await memory.save();
+
+    // Mirror into ChromaDB for semantic search (optional — don't fail on error)
+    try {
+      await chromaClient.addMemory(
+        memory._id.toString(),
+        `${type}: ${value}`,
+        { type, key, importance: memory.importance }
+      );
+    } catch (error) {
+      console.warn('[Memory] Chroma sync skipped:', error.message);
+    }
+
+    return memory;
   }
 
   /**

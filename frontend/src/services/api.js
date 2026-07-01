@@ -80,6 +80,15 @@ export const api = {
       request('/personality/reset', { method: 'DELETE' }),
   },
 
+  // Sync (offline-first) — push locally-created chats/memories to the backend
+  sync: {
+    push: (payload) =>
+      request('/sync/push', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+  },
+
   // Status
   status: () =>
     request('/status'),

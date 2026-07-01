@@ -101,7 +101,7 @@ export default function PersonalitySettings() {
           </div>
           <div>
             <h2 className="font-display font-semibold text-white">Personality</h2>
-            <p className="text-[11px] text-white/40">Muse's personality traits</p>
+            <p className="text-[11px] text-white/40">Nexora's personality traits</p>
           </div>
         </div>
       </div>

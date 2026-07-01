@@ -17,7 +17,7 @@ export default function AgentPanel({ isOnline, isAgentMode, usedTools, onClose }
             }`}>
               {isOnline ? <Wifi size={10} className="text-green-400" /> : <WifiOff size={10} className="text-yellow-400" />}
             </div>
-            <span className="text-xs font-medium text-white/70">Muse Agent</span>
+            <span className="text-xs font-medium text-white/70">Nexora Agent</span>
             {isOnline ? (
               <span className="text-[9px] text-green-400/60 font-mono">ONLINE</span>
             ) : (
