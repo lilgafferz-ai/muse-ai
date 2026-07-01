@@ -90,6 +90,44 @@ build avoids that (fine for a personal admin app).
 
 ---
 
+## Activation & always-on behavior
+
+Nex runs **always-on but idle** in the background, and only "wakes" when summoned.
+Screen off, app not visibly open — she just sits listening for her name or the
+assist trigger, using minimal battery until called.
+
+### 1. By name — always-listening wake word ✅ (fully doable)
+- **On-device** wake-word detection via **Porcupine** (Picovoice) — low-power,
+  runs continuously, no audio leaves the phone.
+- Custom "**Nex**" keyword (+ optional "Hey Nex" / "Yo Nex"). Porcupine fires
+  whenever it hears the keyword, so **"wats up Nex"**, **"yoo Nex"**, **"Nex you
+  there"** all trigger — the surrounding words don't matter.
+- After the wake word she opens the mic for your actual request, answers by voice,
+  then goes idle again.
+- **Android constraint:** background mic (Android 11+) requires a foreground
+  service declared with `microphone` type — which we run anyway (below).
+
+### 2. By long-pressing the power button ⚠️ (has a catch — but solvable at your tier)
+Honest truth: **normal apps can't intercept the power button** — the OS owns it.
+The legit paths (both fine at your root/Shizuku tier):
+- **Default-assistant role (recommended):** implement a `VoiceInteractionService`
+  and register Nex as the phone's **digital assistant** (replacing Google
+  Assistant). Then whatever your phone maps the *assist trigger* to — on most
+  phones **hold power** or a side-key/gesture — launches Nex. Set once in
+  Settings → Default apps → Digital assistant.
+- **Root/Shizuku key-remap (fallback):** remap the power long-press key event
+  directly to launch Nex (device-specific, hacky, but possible with root).
+- Whether "hold power = assistant" exists depends on the phone/OEM; the
+  assistant-role path is the reliable one.
+
+### Staying alive in the background
+- **Foreground service** (`react-native-background-actions`) keeps Nex awake.
+  Android *requires* a persistent notification for this — it'll be **minimal and
+  low-priority** ("Nex is listening"), but the OS won't let it be fully removed.
+- **Battery-optimization exemption:** whitelist Nex from Doze / battery
+  optimization (prompted on first run) or Android eventually kills it.
+- `WAKE_LOCK` + `react-native-keep-awake` keep the wake-word loop running.
+
 ## Phased build order
 
 - **Phase 0 — Toolchain:** Android Studio + SDK + JDK; a physical device with
