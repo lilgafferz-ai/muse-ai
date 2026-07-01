@@ -28,6 +28,7 @@ import { ToastProvider, useToast } from './components/UI/NotificationToast';
 import AgentPanel      from './components/Agent/AgentPanel';
 import StatusIndicator from './components/Agent/StatusIndicator';
 import VoiceButton     from './components/Agent/VoiceButton';
+import VoiceOrb        from './components/Agent/VoiceOrb';
 
 // Hooks & services
 import { useChat }             from './hooks/useChat';
@@ -145,12 +146,13 @@ function AppInner() {
 
   // ─── TTS on AI responses ────────────────────────────────────────────────────
   const prevMsgCountRef = useRef(0);
-  const voiceEnabledRef = useRef(false);
-  voiceEnabledRef.current = voice.voiceEnabled;
+  // She only SPEAKS during a voice call / name-listen — texting stays silent.
+  const voiceModeRef = useRef(false);
+  voiceModeRef.current = callMode || nameListening;
   useEffect(() => {
     if (messages.length > prevMsgCountRef.current) {
       const lastMsg = messages[messages.length - 1];
-      if (lastMsg?.role === 'assistant' && voiceEnabledRef.current && !lastMsg.isError) {
+      if (lastMsg?.role === 'assistant' && voiceModeRef.current && !lastMsg.isError) {
         voice.speak(lastMsg.content.slice(0, 400));
       }
     }
@@ -223,6 +225,9 @@ function AppInner() {
 
   return (
     <div className="h-screen w-screen flex overflow-hidden" style={{ background: 'rgb(8, 5, 17)' }}>
+
+      {/* Futuristic voice orb — only while on a call */}
+      <VoiceOrb active={callMode} speaking={voice.isSpeaking} listening={voice.isListening} />
 
       {/* Mobile sidebar overlay */}
       {showSidebar && (
