@@ -274,8 +274,16 @@ function startMic(){
     const r = e.results[e.results.length-1];
     if(r.isFinal) handleTranscript(r[0].transcript.trim());
   };
-  rec.onerror = e => { if(e.error==="not-allowed") log("act","Nex ⚠️","Mic permission denied. Allow it and press Start again."); };
-  rec.onend = () => { if(listening){ try{ rec.start(); }catch(_){} } };
+  rec.onerror = e => {
+    // fatal errors: stop cleanly instead of letting onend restart-loop forever
+    if(["not-allowed","service-not-allowed","audio-capture"].includes(e.error)){
+      log("act","Nex ⚠️", `Mic unavailable (${e.error}). Allow the mic and press Start again.`);
+      stopMic();
+    }
+  };
+  // continuous mode: Chrome ends recognition every so often — restart with a
+  // small delay so transient errors can't spin into a tight loop
+  rec.onend = () => { if(listening){ setTimeout(()=>{ try{ rec.start(); }catch(_){} }, 400); } };
   try{ rec.start(); }catch(_){}
   listening = true;
   micBtn.textContent = "🛑 Stop listening";
