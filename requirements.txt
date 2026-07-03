@@ -1,0 +1,20 @@
+# Core Nex has ZERO hard dependencies — it runs on the Python stdlib alone
+# (tkinter overlay, wave-based tundum, keyboard demo mode, rule-based brain).
+#
+# The packages below unlock the "full experience". Install what you want:
+
+# --- Offline speech-to-text (wake word + commands) ---
+vosk>=0.3.45          # offline STT engine
+sounddevice>=0.4.6    # microphone capture
+
+# --- Offline text-to-speech (Nex's voice) ---
+pyttsx3>=2.90
+
+# --- Nicer cross-platform audio playback for the tundum ---
+simpleaudio>=1.0.4
+
+# --- Optional on-device "smart" brain (local GGUF model) ---
+# llama-cpp-python>=0.2.0
+
+# --- Running the tests (python -m pytest tests/) ---
+pytest>=7.0

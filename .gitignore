@@ -9,3 +9,13 @@ chroma_db/
 .DS_Store
 Thumbs.db
 nul
+
+# --- Nex (Python assistant) ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+nex.config.json
+assets/tundum.wav
+models/

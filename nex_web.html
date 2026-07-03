@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nex — browser demo</title>
+<style>
+  :root{ --glow:#00e5ff; --bg:#05070d; --panel:#0e1420; --txt:#dfe8f2; --dim:#7c8aa0; }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; min-height:100vh; font-family:-apple-system,Segoe UI,Roboto,sans-serif;
+    background:radial-gradient(1200px 800px at 70% -10%, #101a2b, var(--bg));
+    color:var(--txt); display:flex; flex-direction:column; align-items:center;
+  }
+  header{ text-align:center; padding:28px 16px 8px; }
+  h1{ margin:0; font-weight:700; letter-spacing:.5px; font-size:30px; }
+  h1 span{ color:var(--glow); }
+  .sub{ color:var(--dim); font-size:14px; margin-top:6px; }
+  .stage{ position:relative; width:260px; height:260px; margin:18px 0 6px; }
+  canvas{ position:absolute; inset:0; }
+  #state{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:14px; color:var(--dim); text-transform:uppercase; letter-spacing:2px;
+  }
+  .controls{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin:6px 0 14px; }
+  button{
+    background:var(--panel); color:var(--txt); border:1px solid #223049; border-radius:10px;
+    padding:11px 16px; font-size:14px; cursor:pointer; transition:.15s;
+  }
+  button:hover{ border-color:var(--glow); color:var(--glow); }
+  button.primary{ background:var(--glow); color:#04121a; border-color:var(--glow); font-weight:700; }
+  .row{ display:flex; gap:8px; width:min(560px,92vw); }
+  input{
+    flex:1; background:var(--panel); border:1px solid #223049; border-radius:10px;
+    color:var(--txt); padding:12px 14px; font-size:15px; outline:none;
+  }
+  input:focus{ border-color:var(--glow); }
+  #log{
+    width:min(560px,92vw); margin:16px 0 40px; background:rgba(14,20,32,.6);
+    border:1px solid #1b2740; border-radius:12px; padding:10px 14px; min-height:120px;
+    font-size:14px; line-height:1.55;
+  }
+  .line{ padding:4px 0; border-bottom:1px solid #141d2e; }
+  .line:last-child{ border-bottom:none; }
+  .who{ color:var(--dim); }
+  .heard{ color:#9ecbff; }
+  .act{ color:var(--glow); }
+  .say{ color:#b6ffd0; }
+  .ignore{ color:#5b6577; font-style:italic; }
+  .tip{ color:var(--dim); font-size:12.5px; text-align:center; width:min(560px,92vw); margin-top:-6px; }
+  code{ background:#111a2b; padding:1px 6px; border-radius:5px; color:#9ecbff; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Ne<span>x</span></h1>
+    <div class="sub">Silent by default. Say <b>“Nex”</b> then a command. She only talks when you ask a question.</div>
+  </header>
+
+  <div class="stage">
+    <canvas id="orbit" width="260" height="260"></canvas>
+    <div id="state">idle</div>
+  </div>
+
+  <div class="controls">
+    <button id="mic" class="primary">🎙️ Start listening</button>
+    <button id="test">🔔 Test tun-dum + voice</button>
+  </div>
+
+  <div class="row">
+    <input id="text" placeholder="No mic? Type it:  nex what time is it" autocomplete="off">
+    <button id="send">Send</button>
+  </div>
+  <div class="tip">Try: <code>nex what time is it</code> · <code>nex open youtube.com</code> · <code>nex search for pizza near me</code> · <code>nex what can you do</code></div>
+
+  <div id="log"></div>
+
+<script>
+"use strict";
+
+/* ---------- config (mirrors nex/config.py) ---------- */
+const CFG = {
+  wakeAliases: ["nex","next","nexus","necks","nix"],
+  silentByDefault: true,
+  glow: "#00e5ff",
+  orbitRadius: 70, orbitDot: 12, orbitSpeed: 2.4,
+  ttsRate: 0.92,    // soft = slightly slow
+  ttsPitch: 1.06,   // a touch higher = warmer female
+  ttsVolume: 0.9,
+};
+
+/* ---------- DOM ---------- */
+const cv = document.getElementById("orbit"), ctx = cv.getContext("2d");
+const stateEl = document.getElementById("state");
+const logEl = document.getElementById("log");
+const micBtn = document.getElementById("mic");
+
+/* ---------- log helper ---------- */
+function log(kind, who, msg){
+  const d = document.createElement("div");
+  d.className = "line";
+  d.innerHTML = `<span class="who">${who}</span> <span class="${kind}">${msg}</span>`;
+  logEl.prepend(d);
+}
+
+/* ---------- orbit animation ---------- */
+let active = false, t0 = 0;
+function draw(ts){
+  requestAnimationFrame(draw);
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const cx = cv.width/2, cy = cv.height/2;
+  // idle: faint ring; active: orbiting glow
+  ctx.globalAlpha = active ? 1 : 0.25;
+  if(!t0) t0 = ts;
+  const t = (ts - t0)/1000;
+  const ang = active ? t*CFG.orbitSpeed : t*0.5;
+  const R = active ? CFG.orbitRadius : 6;
+  const x = cx + R*Math.cos(ang), y = cy + R*Math.sin(ang);
+  // guide ring
+  ctx.beginPath(); ctx.arc(cx,cy,CFG.orbitRadius,0,7);
+  ctx.strokeStyle = "rgba(0,229,255,0.12)"; ctx.lineWidth=1; ctx.stroke();
+  // glow layers
+  for(const [m,a] of [[3.2,0.10],[2.2,0.16],[1.4,0.28]]){
+    ctx.beginPath(); ctx.arc(x,y,CFG.orbitDot*m,0,7);
+    ctx.fillStyle = `rgba(0,229,255,${a})`; ctx.fill();
+  }
+  ctx.beginPath(); ctx.arc(x,y,CFG.orbitDot,0,7);
+  ctx.fillStyle = CFG.glow; ctx.fill();
+  ctx.globalAlpha = 1;
+}
+requestAnimationFrame(draw);
+
+/* ---------- tun-dum chime (Web Audio, matches audio.py notes) ---------- */
+let AC = null;
+function tundum(){
+  try{
+    AC = AC || new (window.AudioContext||window.webkitAudioContext)();
+    const note = (freq, start, dur, peak)=>{
+      const o = AC.createOscillator(), g = AC.createGain();
+      o.type="sine"; o.frequency.value=freq;
+      const o2 = AC.createOscillator(), g2 = AC.createGain();
+      o2.type="sine"; o2.frequency.value=freq*2;   // soft octave
+      o.connect(g); o2.connect(g2); g.connect(AC.destination); g2.connect(AC.destination);
+      const t = AC.currentTime + start;
+      g.gain.setValueAtTime(0.0001,t);
+      g.gain.exponentialRampToValueAtTime(peak,t+0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+      g2.gain.setValueAtTime(0.0001,t);
+      g2.gain.exponentialRampToValueAtTime(peak*0.3,t+0.015);
+      g2.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+      o.start(t); o.stop(t+dur+0.05); o2.start(t); o2.stop(t+dur+0.05);
+    };
+    note(660,0,0.14,0.5);      // "tun"
+    note(392,0.15,0.34,0.5);   // "dum"
+  }catch(e){}
+}
+
+/* ---------- voice (soft female) ---------- */
+let VOICE = null;
+const FEMALE = /female|zira|samantha|victoria|susan|karen|moira|tessa|fiona|serena|kate|linda|hazel|catherine|allison|ava|eva|amy|joanna|salli|google uk english female|google us english/i;
+function loadVoice(){
+  const vs = speechSynthesis.getVoices();
+  VOICE = vs.find(v=>FEMALE.test(v.name)) || vs.find(v=>/^en/i.test(v.lang)) || vs[0] || null;
+}
+if("speechSynthesis" in window){
+  loadVoice();
+  speechSynthesis.onvoiceschanged = loadVoice;
+}
+function speak(text){
+  if(!text) return;
+  log("say","Nex 🗣️", text);
+  if(!("speechSynthesis" in window)) return;
+  const u = new SpeechSynthesisUtterance(text);
+  if(VOICE) u.voice = VOICE;
+  u.rate = CFG.ttsRate; u.pitch = CFG.ttsPitch; u.volume = CFG.ttsVolume;
+  speechSynthesis.cancel(); speechSynthesis.speak(u);
+}
+
+/* ---------- wake extraction (mirrors wake.py) ---------- */
+function extractCommand(text){
+  const words = text.toLowerCase().replace(/[,\.]/g," ").split(/\s+/).filter(Boolean);
+  for(let i=0;i<words.length;i++){
+    if(CFG.wakeAliases.includes(words[i].replace(/[.?!]/g,"")))
+      return words.slice(i+1).join(" ").trim();
+  }
+  return null; // wake word not present
+}
+
+/* ---------- brain + commands (mirrors brain.py / commands.py) ---------- */
+const Q = ["what","who","when","where","why","how","which","whose","is","are","can","could","do","does","did","should","would","will","tell me","explain"];
+const isQuestion = t => t.trim().endsWith("?") || Q.some(q => t===q || t.startsWith(q+" "));
+
+function runCommand(cmd){
+  const low = cmd.toLowerCase().trim();
+  // time
+  if(/\b(what time|the time|current time)\b/.test(low)){
+    const now = new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+    return { speak:`It's ${now}.`, query:true };
+  }
+  // date
+  if(/\b(what day|what's the date|todays? date|the date)\b/.test(low)){
+    const d = new Date().toLocaleDateString([], {weekday:'long', month:'long', day:'numeric'});
+    return { speak:`Today is ${d}.`, query:true };
+  }
+  // open a website
+  let m = low.match(/^open\s+(.+)/);
+  if(m){
+    let target = m[1].trim();
+    if(/\.\w{2,}/.test(target) && !target.includes(" ")){
+      const url = target.startsWith("http")?target:"https://"+target;
+      window.open(url, "_blank");
+      return { act:`opening ${url}`, speak:"" };
+    }
+    const known = {youtube:"https://youtube.com", google:"https://google.com",
+      gmail:"https://mail.google.com", maps:"https://maps.google.com",
+      twitter:"https://twitter.com", reddit:"https://reddit.com"};
+    if(known[target]){ window.open(known[target],"_blank"); return {act:`opening ${target}`, speak:""}; }
+    window.open("https://www.google.com/search?q="+encodeURIComponent(target),"_blank");
+    return { act:`searching for “${target}”`, speak:"" };
+  }
+  // search
+  m = low.match(/^(search for|look up|google)\s+(.+)/);
+  if(m){
+    const q = m[2].trim();
+    window.open("https://www.google.com/search?q="+encodeURIComponent(q),"_blank");
+    return { act:`searching for “${q}”`, speak:"" };
+  }
+  // help
+  if(/\b(what can you do|help|list commands)\b/.test(low)){
+    return { speak:"I can handle: time, date, open, search, and help.", query:true };
+  }
+  // unmatched
+  if(isQuestion(low)) return { speak:"I don't have an answer for that offline yet.", query:true, clarify:true };
+  return { ignore:true };
+}
+
+/* ---------- the loop: wake -> activate -> decide -> (speak?) -> idle ---------- */
+let busy = false;
+function handleTranscript(text){
+  const cmd = extractCommand(text);
+  if(cmd === null) return;             // no wake word: stay asleep, say nothing
+  log("heard","🎤 heard:", `“${text}”`);
+  if(busy) return;
+  busy = true;
+  activate();
+  if(cmd === ""){                      // just "Nex" — wake, wait, don't talk
+    setTimeout(deactivate, 1400);
+    busy = false;
+    return;
+  }
+  const r = runCommand(cmd);
+  if(r.act) log("act","Nex ⚙️", r.act);
+  if(r.ignore) log("ignore","Nex 💤", "(nothing matched — staying silent)");
+  let toSay = r.speak || "";
+  if(CFG.silentByDefault && !r.query && !toSay.endsWith("?")) toSay = "";
+  if(toSay) speak(toSay);
+  setTimeout(()=>{ deactivate(); busy=false; }, 1600);
+}
+
+function activate(){ active = true; stateEl.textContent = "listening"; stateEl.style.color = CFG.glow; tundum(); }
+function deactivate(){ active = false; stateEl.textContent = "idle"; stateEl.style.color = ""; }
+
+/* ---------- mic (Web Speech API) ---------- */
+let rec = null, listening = false;
+function startMic(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){
+    log("act","Nex ⚠️", "This browser has no speech recognition. Use Chrome or Edge — or just type below.");
+    return;
+  }
+  rec = new SR();
+  rec.continuous = true; rec.interimResults = false; rec.lang = "en-US";
+  rec.onresult = e => {
+    const r = e.results[e.results.length-1];
+    if(r.isFinal) handleTranscript(r[0].transcript.trim());
+  };
+  rec.onerror = e => { if(e.error==="not-allowed") log("act","Nex ⚠️","Mic permission denied. Allow it and press Start again."); };
+  rec.onend = () => { if(listening){ try{ rec.start(); }catch(_){} } };
+  try{ rec.start(); }catch(_){}
+  listening = true;
+  micBtn.textContent = "🛑 Stop listening";
+  micBtn.classList.remove("primary");
+  log("act","Nex ✅", "Listening… say “Nex, what time is it?”");
+  if(AC && AC.state==="suspended") AC.resume();
+}
+function stopMic(){
+  listening = false; if(rec){ try{ rec.stop(); }catch(_){} }
+  micBtn.textContent = "🎙️ Start listening";
+  micBtn.classList.add("primary");
+  deactivate();
+  log("act","Nex 💤", "Stopped listening.");
+}
+micBtn.onclick = ()=>{ AC = AC || new (window.AudioContext||window.webkitAudioContext)(); listening ? stopMic() : startMic(); };
+
+/* ---------- test + text fallback ---------- */
+document.getElementById("test").onclick = ()=>{ activate(); tundum(); speak("Hey, I'm Nex. This is my soft voice."); setTimeout(deactivate,1600); };
+const textIn = document.getElementById("text");
+function sendText(){ const v = textIn.value.trim(); if(!v) return; handleTranscript(v); textIn.value=""; }
+document.getElementById("send").onclick = sendText;
+textIn.addEventListener("keydown", e=>{ if(e.key==="Enter") sendText(); });
+
+log("act","Nex 💤", "Idle. Press Start listening, or type a command below.");
+</script>
+</body>
+</html>
