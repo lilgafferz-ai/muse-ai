@@ -170,10 +170,16 @@ function speak(text){
   if(!text) return;
   log("say","Nex 🗣️", text);
   if(!("speechSynthesis" in window)) return;
+  if(!VOICE) loadVoice();
+  if(!VOICE && speechSynthesis.getVoices().length===0)
+    log("act","Nex ⚠️","No system voices available for speech output.");
   const u = new SpeechSynthesisUtterance(text);
   if(VOICE) u.voice = VOICE;
   u.rate = CFG.ttsRate; u.pitch = CFG.ttsPitch; u.volume = CFG.ttsVolume;
-  speechSynthesis.cancel(); speechSynthesis.speak(u);
+  // Chrome drops an utterance queued right after cancel(); give it a beat,
+  // and resume() first since Chrome sometimes wedges in a paused state
+  speechSynthesis.cancel();
+  setTimeout(()=>{ try{ speechSynthesis.resume(); speechSynthesis.speak(u); }catch(_){} }, 60);
 }
 
 /* ---------- wake extraction (mirrors wake.py) ---------- */
@@ -276,10 +282,15 @@ function startMic(){
   };
   rec.onerror = e => {
     // fatal errors: stop cleanly instead of letting onend restart-loop forever
-    if(["not-allowed","service-not-allowed","audio-capture"].includes(e.error)){
-      log("act","Nex ⚠️", `Mic unavailable (${e.error}). Allow the mic and press Start again.`);
-      stopMic();
-    }
+    const fatal = {
+      "not-allowed": "Mic permission denied — click the 🎤/🔒 icon in the address bar, allow the mic, then press Start again.",
+      "service-not-allowed": "Speech service blocked by the browser.",
+      "audio-capture": "No microphone found — check it's plugged in and allowed in Windows Settings → Privacy → Microphone.",
+      "network": "Speech recognition in this browser is cloud-based and needs internet — check your connection.",
+    };
+    if(fatal[e.error]){ log("act","Nex ⚠️", fatal[e.error]); stopMic(); }
+    else if(e.error!=="no-speech" && e.error!=="aborted")
+      log("act","Nex ⚠️", `Speech recognition error: ${e.error}`);
   };
   // continuous mode: Chrome ends recognition every so often — restart with a
   // small delay so transient errors can't spin into a tight loop
@@ -307,6 +318,11 @@ function sendText(){ const v = textIn.value.trim(); if(!v) return; handleTranscr
 document.getElementById("send").onclick = sendText;
 textIn.addEventListener("keydown", e=>{ if(e.key==="Enter") sendText(); });
 
+/* ---------- startup diagnostics (log prepends, so newest on top) ---------- */
+const SR_OK = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+log("act","Nex 🔧", `diagnostics — page: ${location.protocol.replace(":","")} · speech-in: ${SR_OK?"supported":"NOT supported"} · speech-out: ${"speechSynthesis" in window?"supported":"NOT supported"}`);
+if(location.protocol === "file:")
+  log("act","Nex ⚠️", "Opened as a file — Chrome blocks the mic on file:// pages. Serve it instead: python -m http.server 8765 then open http://localhost:8765/nex_web.html (typing works either way).");
 log("act","Nex 💤", "Idle. Press Start listening, or type a command below.");
 </script>
 </body>
